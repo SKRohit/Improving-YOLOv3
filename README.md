@@ -12,7 +12,7 @@ Use [Microsoft VoTT](https://github.com/Microsoft/VoTT/releases) tool to label o
     $ python Convert_To_YOLO_Format.py path_to_exported_files_from_the_image_tagging_step_with_VoTT
     
 ## Training
-Use pretrained weights to finetune the YOLOv3 model using tricks mentined in [Improving YOLOv3](https://blog.paperspace.com/improving-yolo/).
+Use pretrained weights to finetune the YOLOv3 model using tricks mentined in [Improving YOLOv3](https://blog.paperspace.com/improving-yolo/) on your data.
 ```
 $ train.py [-h] [--epochs EPOCHS] [--batch_size BATCH_SIZE]
                 [--gradient_accumulations GRADIENT_ACCUMULATIONS]
@@ -23,6 +23,9 @@ $ train.py [-h] [--epochs EPOCHS] [--batch_size BATCH_SIZE]
                 [--evaluation_interval EVALUATION_INTERVAL]
                 [--compute_map COMPUTE_MAP]
                 [--multiscale_training MULTISCALE_TRAINING]
+                [--multiscale_training MULTISCALE_TRAINING]
+                [--mixuo_training MIXUP_TRAINING]
+                [--sybn_training SYNCHRONIZED_BATCH_NORMALIZATION]
 ```
 
 ## Credit
