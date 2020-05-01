@@ -1,0 +1,6 @@
+Windshield
+Mirror
+Bumper
+Fender
+Head light
+Bonnet
