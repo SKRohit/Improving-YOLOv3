@@ -23,15 +23,7 @@ def evaluate(model, path, iou_thres, conf_thres, nms_thres, img_size, batch_size
     model.eval()
 
     # Get dataloader
-    dataset = MixUpDataset(
-        path,
-        preproc=ValTransform(
-            rgb_means=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)
-        ),
-        augment=False,
-        multiscale=False,
-        beta_values=None,
-    )
+    dataset = MixUpDataset(path, augment=False, multiscale=False, beta_values=None)
     dataloader = torch.utils.data.DataLoader(
         dataset,
         batch_size=batch_size,
@@ -44,7 +36,7 @@ def evaluate(model, path, iou_thres, conf_thres, nms_thres, img_size, batch_size
 
     labels = []
     sample_metrics = []  # List of tuples (TP, confs, pred)
-    for batch_i, (_, imgs, targets) in enumerate(
+    for batch_i, (imgs, targets) in enumerate(
         tqdm.tqdm(dataloader, desc="Detecting objects")
     ):
 
@@ -58,9 +50,9 @@ def evaluate(model, path, iou_thres, conf_thres, nms_thres, img_size, batch_size
 
         with torch.no_grad():
             outputs = model(imgs)
-            outputs = non_max_suppression(
-                outputs, conf_thres=conf_thres, nms_thres=nms_thres
-            )
+            # outputs = non_max_suppression(
+            #     outputs, conf_thres=conf_thres, nms_thres=nms_thres
+            # )
 
         sample_metrics += get_batch_statistics(
             outputs, targets, iou_threshold=iou_thres

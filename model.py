@@ -6,14 +6,15 @@ import torch.nn.functional as F
 from torch.autograd import Variable
 import numpy as np
 
-from utils.parse_config import *
-from utils.utils import build_targets, to_cpu, non_max_suppression
+from utils import *
+
+# from utils import build_targets, to_cpu, non_max_suppression
 
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 
 
-def create_modules(module_defs, num_classes):
+def create_modules(module_defs):
     """
     Constructs module list of layer blocks from module configuration in module_defs
     """
@@ -80,7 +81,7 @@ def create_modules(module_defs, num_classes):
             anchors = [int(x) for x in module_def["anchors"].split(",")]
             anchors = [(anchors[i], anchors[i + 1]) for i in range(0, len(anchors), 2)]
             anchors = [anchors[i] for i in anchor_idxs]
-            # num_classes = int(module_def["classes"])
+            num_classes = int(module_def["classes"])
             img_size = int(hyperparams["height"])
             # Define detection layer
             yolo_layer = YOLOLayer(anchors, num_classes, img_size)
@@ -167,7 +168,6 @@ class YOLOLayer(nn.Module):
             .permute(0, 1, 3, 4, 2)
             .contiguous()
         )
-        print(prediction.shape)
         # Get outputs
         x = torch.sigmoid(prediction[..., 0])  # Center x
         # print(x.shape)
@@ -198,10 +198,7 @@ class YOLOLayer(nn.Module):
             ),
             -1,
         )
-        print(pred_boxes.shape)
-        print(pred_conf.shape)
-        print(pred_cls.shape)
-        print(output.shape)
+
         if targets is None:
             return output, 0
         else:
@@ -261,10 +258,10 @@ class YOLOLayer(nn.Module):
 class Darknet(nn.Module):
     """YOLOv3 object detection model"""
 
-    def __init__(self, config_path, num_classes, darknet=False, img_size=416):
+    def __init__(self, config_path, darknet=False, img_size=416):
         super(Darknet, self).__init__()
         self.darknet = darknet
-        self.module_defs = parse_model_config(config_path, num_classes)
+        self.module_defs = parse_model_config(config_path)
         if self.darknet:
             self.module_defs = self.module_defs[:76]
         self.hyperparams, self.module_list = create_modules(self.module_defs)

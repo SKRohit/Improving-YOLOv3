@@ -15,7 +15,6 @@ import time
 import datetime
 import argparse
 
-import apex
 import torch
 from torch.utils.data import DataLoader
 from torchvision import datasets
@@ -26,6 +25,7 @@ from torch.optim.lr_scheduler import CosineAnnealingLR
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser.add_argument("--local_rank", type=int, default=0)
     parser.add_argument("--epochs", type=int, default=100, help="number of epochs")
     parser.add_argument(
         "--batch_size", type=int, default=8, help="size of each image batch"
@@ -56,11 +56,15 @@ if __name__ == "__main__":
     parser.add_argument(
         "--n_cpu",
         type=int,
-        default=8,
+        default=1,
         help="number of cpu threads to use during batch generation",
     )
+    parser.add_argument("--ngpu", type=int, default=10, help="number of gpu")
     parser.add_argument(
         "--img_size", type=int, default=416, help="size of each image dimension"
+    )
+    parser.add_argument(
+        "--half", dest="half", action="store_true", default=False, help="FP16 training"
     )
     parser.add_argument(
         "--checkpoint_interval",
@@ -74,14 +78,17 @@ if __name__ == "__main__":
         default=1,
         help="interval evaluations on validation set",
     )
-    parser.add_argument(
-        "--compute_map", default=False, help="if True computes mAP every tenth batch"
-    )
+    # parser.add_argument(
+    #     "--compute_map", default=False, help="if True computes mAP every tenth batch"
+    # )
     parser.add_argument(
         "--multiscale_training", default=True, help="allow for multi-scale training"
     )
     parser.add_argument(
         "--mixup_training", default=True, help="allow for mixup training"
+    )
+    parser.add_argument(
+        "--distributed", default=False, help="allow for distributed training"
     )
     parser.add_argument(
         "--sybn_training",
@@ -94,6 +101,11 @@ if __name__ == "__main__":
     logger = Logger("logs")
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    torch.cuda.set_device(opt.local_rank)
+    world_size = opt.ngpu
+    torch.distributed.init_process_group(
+        "nccl", init_method="env://", world_size=world_size, rank=opt.local_rank
+    )
 
     os.makedirs("output", exist_ok=True)
     os.makedirs("checkpoints", exist_ok=True)
@@ -105,8 +117,8 @@ if __name__ == "__main__":
     class_names = load_classes(data_config["names"])
 
     # Initiate model
-    model = Darknet(opt.model_def, class_names).to(device)
-    model.apply(weights_init_normal)
+    model = Darknet(opt.model_def).to(device)
+    # model.apply(weights_init_normal)   # train from scratch
 
     # If specified we start from checkpoint
     if opt.pretrained_weights:
@@ -115,22 +127,36 @@ if __name__ == "__main__":
         else:
             model.load_darknet_weights(opt.pretrained_weights)
 
-    # if opt.sybn_training:
-    #     model = apex.parallel.convert_syncbn_model(model)
+    if opt.sybn_training:
+        model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
+
+    if opt.half:
+        model = model.half()
+
+    device = torch.device("cuda:{}".format(opt.local_rank))
+    model = model.to(device)
+
+    if opt.ngpu > 1:
+        if opt.distributed:
+            model = torch.nn.parallel.DistributedDataParallel(
+                model, device_ids=[opt.local_rank], output_device=opt.local_rank
+            )
+        else:
+            model = nn.DataParallel(model)
+
     # Get dataloader
-    dataset = MixUpDataset(
-        train_path,
-        augment=True,
-        preproc=TrainTransform(
-            rgb_means=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225), max_labels=50
-        ),
-        multiscale=opt.multiscale_training,
-    )
+    dataset = MixUpDataset(train_path, augment=True, multiscale=opt.multiscale_training)
+
+    if opt.distributed:
+        sampler = torch.utils.data.DistributedSampler(dataset)
+    else:
+        sampler = torch.utils.data.RandomSampler(dataset)
+
     dataloader = torch.utils.data.DataLoader(
         dataset,
         batch_size=opt.batch_size,
-        shuffle=True,
         num_workers=opt.n_cpu,
+        sampler=sampler,
         pin_memory=True,
         collate_fn=dataset.collate_fn,
     )
@@ -159,7 +185,7 @@ if __name__ == "__main__":
         model.train()
         start_time = time.time()
         scheduler.step()
-        for batch_i, (_, imgs, targets) in enumerate(dataloader):
+        for batch_i, (imgs, targets) in enumerate(dataloader):
             batches_done = len(dataloader) * epoch + batch_i
 
             imgs = Variable(imgs.to(device))
