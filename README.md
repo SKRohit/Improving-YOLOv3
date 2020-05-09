@@ -5,27 +5,20 @@ Accompanying code for Paperspace blog [Improving YOLOv3](https://blog.paperspace
 Use [Microsoft VoTT](https://github.com/Microsoft/VoTT/releases) tool to label objects.
 
 ##### Download pretrained weights
+    $ mkdir weights
     $ cd weights/
     $ curl https://pjreddie.com/media/files/yolov3.weights --output yolov3.weights
 
 ##### Convert labelled data to YOLO format
     $ python Convert_To_YOLO_Format.py path_to_exported_files_from_the_image_tagging_step_with_VoTT
     
+##### Create yolo config file for any number of classes
+    $ python custom_model.py --num_classes 6 --file_name ./config/yolo-custom-6class.cfg
+    
 ## Training
 Use pretrained weights to finetune the YOLOv3 model using tricks mentined in [Improving YOLOv3](https://blog.paperspace.com/improving-yolo/) on your data.
 ```
-$ train.py [-h] [--epochs EPOCHS] [--batch_size BATCH_SIZE]
-                [--gradient_accumulations GRADIENT_ACCUMULATIONS]
-                [--model_def MODEL_DEF] [--data_config DATA_CONFIG]
-                [--pretrained_weights PRETRAINED_WEIGHTS] [--n_cpu N_CPU]
-                [--img_size IMG_SIZE]
-                [--checkpoint_interval CHECKPOINT_INTERVAL]
-                [--evaluation_interval EVALUATION_INTERVAL]
-                [--compute_map COMPUTE_MAP]
-                [--multiscale_training MULTISCALE_TRAINING]
-                [--multiscale_training MULTISCALE_TRAINING]
-                [--mixuo_training MIXUP_TRAINING]
-                [--sybn_training SYNCHRONIZED_BATCH_NORMALIZATION]
+$ python -m torch.distributed.launch --nproc_per_node=1 train.py --pretrained_weights "./weights/yolov3.weights" --n_cpu 1 --ngpu 1 --distributed True --model_def ./config/yolo-custom-6class.cfg
 ```
 
 ## Credit
